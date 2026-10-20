@@ -1,19 +1,23 @@
 # Pico theme mirror
 
-A compact mirror of the Pico Launcher themes on [themes.flashcarts.net/pico](https://themes.flashcarts.net/pico/) for the launcher's built-in theme store (`../pico-launcher`, branch `theme-store`). The website is made for browsers: a 190 KB HTML catalog, `.7z` downloads that include background music, HTTPS only. On a DSi every byte goes over slow Wi-Fi, so the mirror serves:
+A compact mirror of the [Pico Launcher](https://github.com/LNH-team/pico-launcher) themes from [themes.flashcarts.net/pico](https://themes.flashcarts.net/pico/), made to be downloaded by a Nintendo DSi over Wi-Fi from a theme store inside the launcher. The website is made for browsers: a 190 KB HTML catalog and `.7z` downloads that include background music. On a DSi every byte goes over slow Wi-Fi, so the mirror serves:
 
 - one small compressed index instead of the HTML catalog,
 - theme files and background music as separate downloads (music is most of the size and optional),
 - previews fetched one at a time, only for the theme being looked at,
-- everything compressed with the DS BIOS's own LZ77, so the DS needs no decompressor code.
+- everything compressed with the simple LZ77 format of the DS BIOS.
 
-The site's content is licensed CC BY-NC-SA 4.0 (Sanras and contributors, see its license page). The themes belong to their authors and are only repackaged here; some include music from games.
+Published at **https://eylexander.github.io/pico-theme-mirror/**, rebuilt every week by GitHub Actions (`.github/workflows/publish.yml`).
 
-Sizes (October 2026, 544 themes including variants): index 19 KB compressed, theme packs ~59 KB each (31 MB total), previews ~31 KB each, music ~660 MB after deduplication.
+## Credits and license
+
+All themes come from [themes.flashcarts.net](https://themes.flashcarts.net/) (Kernel Themes, © Sanras and contributors), whose content is licensed [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Each theme belongs to its author, listed in the index; this mirror only repackages them, non-commercially, under the same license. Some themes include music from games, which belongs to its owners. If you are an author and want a theme removed, open an issue: it will be dropped from the next build.
+
+Sizes (October 2026, 544 themes including variants): index 21 KB compressed, theme packs ~59 KB each (31 MB total), previews ~31 KB each, music ~660 MB after deduplication.
 
 ## Build
 
-The tools only run in Docker:
+GitHub Actions builds and publishes the mirror. Locally, the tools run in Docker:
 
 ```sh
 docker build -t theme-repo-builder .
@@ -22,9 +26,9 @@ docker run --rm -v "<repo>:/repo" -w /repo theme-repo-builder python -I build.py
 
 Downloads are cached in `cache/` (rerunning only fetches new themes), the mirror goes to `out/`. `python -I lz10.py` runs the compressor's self test. Archives are untrusted: they are unpacked inside the container in a temporary folder, and only files whose names pass the checks in `collect_files()` end up in a pack.
 
-## Serving it to the DS (testing)
+## Serving it from a PC (testing)
 
-The DS speaks plain HTTP only. Serve `out/` from this PC:
+GitHub Pages is HTTPS only. To test with a launcher that speaks plain HTTP, serve `out/` from a PC:
 
 ```sh
 docker run --rm -p 8080:8080 -v "<repo>/out:/srv:ro" -w /srv python:3.14 python -m http.server 8080

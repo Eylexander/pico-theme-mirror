@@ -1,0 +1,54 @@
+name: Build and publish the mirror
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The archives (~3 GB) are kept between runs so only new themes are downloaded.
+      - uses: actions/cache@v4
+        with:
+          path: cache/dl
+          key: theme-archives-${{ github.run_id }}
+          restore-keys: theme-archives-
+
+      - name: Install 7-Zip
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends p7zip-full
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build the mirror
+        run: python -I build.py
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
