@@ -38,6 +38,23 @@ NAME_PART = re.compile(r"^[A-Za-z0-9 _.()+\-]{1,64}$")
 ALLOWED_EXTENSIONS = {".bin", ".json", ".bmp", ".bcstm"}
 
 
+# The mirror is for the DSi; this page only tells browsers what the site is.
+HOME_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pico theme mirror</title>
+<style>body{{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;color:#222;background:#fff}}
+@media (prefers-color-scheme:dark){{body{{color:#ddd;background:#111}}a{{color:#8ab4f8}}}}</style></head>
+<body><h1>Pico theme mirror</h1>
+<p>{count} themes for <a href="https://github.com/LNH-team/pico-launcher">Pico Launcher</a>, repackaged for a theme store
+that runs on the Nintendo DSi itself. To browse them on a computer, use
+<a href="https://themes.flashcarts.net/pico/">themes.flashcarts.net</a>, where they come from.</p>
+<p>Themes &copy; their authors and Sanras and contributors, licensed
+<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>.
+<a href="index.txt">Theme list</a> &middot; <a href="https://github.com/Eylexander/pico-theme-mirror">Source and formats</a></p>
+</body></html>
+"""
+
+
 def log(*args):
     print(*args, flush=True)
 
@@ -295,6 +312,8 @@ def main():
         f.write(lz10.compress(index))
     with open(os.path.join(OUT, "index.txt"), "wb") as f:  # for humans and debugging
         f.write(index)
+    with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8") as f:
+        f.write(HOME_PAGE.format(count=len(index_lines)))
 
     kb = lambda n: f"{n / 1024:,.0f} KB"
     log("")
