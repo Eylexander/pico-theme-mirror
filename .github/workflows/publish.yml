@@ -21,13 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       built: ${{ steps.skip.outputs.skip != 'true' }}
-      marker: published-${{ steps.source.outputs.commit }}-${{ hashFiles('build.py', 'lz10.py') }}
+      marker: ${{ steps.source.outputs.marker }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Find the catalog version
         id: source
-        run: echo "commit=$(git ls-remote https://github.com/flashcarts/kernel-themes.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+        run: |
+          commit=$(git ls-remote https://github.com/flashcarts/kernel-themes.git HEAD | cut -f1)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "marker=published-$commit-${{ hashFiles('build.py', 'lz10.py') }}" >> "$GITHUB_OUTPUT"
 
       # A marker per published (catalog, generator) pair. Scheduled runs stop here when
       # nothing changed; restoring it daily also keeps GitHub from expiring it.
@@ -36,7 +39,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .published
-          key: published-${{ steps.source.outputs.commit }}-${{ hashFiles('build.py', 'lz10.py') }}
+          key: ${{ steps.source.outputs.marker }}
 
       - name: Decide
         id: skip
