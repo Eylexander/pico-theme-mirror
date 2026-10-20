@@ -6,6 +6,7 @@ Run in the Docker image (see README.md). Downloads are cached in cache/, the mir
 is written to out/. Archives are untrusted: they are unpacked in a temporary folder
 and only files with validated names are copied into the packs."""
 
+import hashlib
 import json
 import lzma
 import os
@@ -86,6 +87,15 @@ def unquote(value):
 def slugify(text):
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug or "theme"
+
+
+def unique(value, used, separator="-"):
+    """value, or value-2, value-3... whichever isn't in used yet (case-insensitive, like FAT)."""
+    candidate, n = value, 2
+    while candidate.lower() in used:
+        candidate, n = f"{value}{separator}{n}", n + 1
+    used.add(candidate.lower())
+    return candidate
 
 
 def download(file_name):
@@ -190,13 +200,15 @@ def theme_info(files):
 
 
 def main():
+    shutil.rmtree(OUT, ignore_errors=True)  # ids can change between runs; no stale files
     os.makedirs(os.path.join(OUT, "themes"), exist_ok=True)
     os.makedirs(os.path.join(OUT, "previews"), exist_ok=True)
+    os.makedirs(os.path.join(OUT, "music"), exist_ok=True)
     entries = fetch_metadata()
     log(f"{len(entries)} themes in the catalog")
 
-    index_lines, used_ids = [], set()
-    stats = {"archives": 0, "core": 0, "core_lzma": 0, "music": 0, "previews": 0, "themes": 0}
+    index_lines, used_ids, used_folders = [], set(), set()
+    stats = {"archives": 0, "core": 0, "core_lzma": 0, "music": 0, "music_unique": 0, "previews": 0, "themes": 0}
     for entry in entries:
         for download_name in entry.get("downloads") or []:
             log(entry.get("title", entry["slug"]), "-", download_name)
@@ -215,35 +227,47 @@ def main():
                 themes = find_themes(tmp)
             if not themes:
                 log("  no theme.json in archive")
+            # Entries with several downloads are variants (e.g. one per wallpaper): name each
+            # after its download so they get distinct ids, names and SD folders.
+            variant = os.path.splitext(download_name)[0] if len(entry["downloads"]) > 1 else None
             for theme_folder, files in sorted(themes.items()):
-                theme_id = entry["slug"] if len(themes) == 1 else slugify(entry["slug"] + "-" + os.path.basename(theme_folder))
-                while theme_id in used_ids:
-                    theme_id += "-2"
-                used_ids.add(theme_id)
+                label = variant or entry.get("title") or entry["slug"]
+                if len(themes) > 1:
+                    label += " - " + os.path.basename(theme_folder)
+                theme_id = unique(slugify(label) if variant or len(themes) > 1 else entry["slug"], used_ids)
+                folder = unique(sd_folder_name(label if variant or len(themes) > 1 else os.path.basename(theme_folder)),
+                                used_folders, separator=" ")
 
                 core = {p: d for p, d in files.items() if not is_music(p)}
                 music = {p: d for p, d in files.items() if is_music(p)}
                 core_pack = build_pack(core)
                 with open(os.path.join(OUT, "themes", theme_id + ".pak"), "wb") as f:
                     f.write(core_pack)
-                music_size = 0
+                # Music is stored by content: 360 variants share one song, so this
+                # takes the mirror from ~3 GB to well under GitHub Pages' 1 GB.
+                music_key, music_size = "", 0
                 if music:
                     music_pack = build_pack(music)
+                    music_key = hashlib.sha256(music_pack).hexdigest()[:16]
                     music_size = len(music_pack)
-                    with open(os.path.join(OUT, "themes", theme_id + ".bgm.pak"), "wb") as f:
-                        f.write(music_pack)
+                    music_path = os.path.join(OUT, "music", music_key + ".pak")
+                    if not os.path.exists(music_path):
+                        with open(music_path, "wb") as f:
+                            f.write(music_pack)
+                        stats["music_unique"] += music_size
                 preview = build_preview(files)
                 if preview:
                     with open(os.path.join(OUT, "previews", theme_id + ".lz"), "wb") as f:
                         f.write(preview)
 
                 info = theme_info(files)
+                name = label if variant or len(themes) > 1 else (info.get("name") or entry.get("title"))
                 fields = [
                     theme_id,
-                    sd_folder_name(os.path.basename(theme_folder)),
-                    clean_field(info.get("name") or entry.get("title"), "name"),
+                    folder,
+                    clean_field(name, "name"),
                     clean_field(entry.get("creator") or info.get("author"), "author"),
-                    str(len(core_pack)), str(music_size), str(len(preview) if preview else 0),
+                    str(len(core_pack)), music_key, str(music_size), str(len(preview) if preview else 0),
                     (entry.get("updated") or entry.get("created") or "")[:10],
                     clean_field(entry.get("description") or info.get("description"), "description"),
                 ]
@@ -268,7 +292,7 @@ def main():
     log(f"original archives: {kb(stats['archives'])}")
     log(f"core packs (LZ77): {kb(stats['core'])}, avg {kb(stats['core'] / max(1, stats['themes']))}"
         f"  (LZMA would be {kb(stats['core_lzma'])})")
-    log(f"music packs: {kb(stats['music'])}")
+    log(f"music: {kb(stats['music'])} referenced, {kb(stats['music_unique'])} stored after dedup")
     log(f"previews: {kb(stats['previews'])}, avg {kb(stats['previews'] / max(1, stats['themes']))}")
 
 

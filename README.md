@@ -7,7 +7,9 @@ A compact mirror of the Pico Launcher themes on [themes.flashcarts.net/pico](htt
 - previews fetched one at a time, only for the theme being looked at,
 - everything compressed with the DS BIOS's own LZ77, so the DS needs no decompressor code.
 
-Kept local for now. The themes belong to their authors (see the site's license page) and are only repackaged.
+The site's content is licensed CC BY-NC-SA 4.0 (Sanras and contributors, see its license page). The themes belong to their authors and are only repackaged here; some include music from games.
+
+Sizes (October 2026, 544 themes including variants): index 19 KB compressed, theme packs ~59 KB each (31 MB total), previews ~31 KB each, music ~660 MB after deduplication.
 
 ## Build
 
@@ -45,16 +47,19 @@ LZ77-compressed UTF-8 text. First line: `PTIDX <version> <count>`, currently ver
 | 2 | display name (≤ 48 chars) | `Joltik` |
 | 3 | author (≤ 32 chars) | `cement____` |
 | 4 | size of `themes/<id>.pak` in bytes | `24312` |
-| 5 | size of `themes/<id>.bgm.pak`, 0 if the theme has no music | `3489080` |
-| 6 | size of `previews/<id>.lz`, 0 if there is no preview | `61234` |
-| 7 | last update, `YYYY-MM-DD` | `2026-08-27` |
-| 8 | description (≤ 120 chars) | `joltik theme yippie` |
+| 5 | music key: `music/<key>.pak`, empty if the theme has no music | `3f9a0c1d2e4b5a68` |
+| 6 | size of the music pack, 0 if none | `3489080` |
+| 7 | size of `previews/<id>.lz`, 0 if there is no preview | `61234` |
+| 8 | last update, `YYYY-MM-DD` | `2026-08-27` |
+| 9 | description (≤ 120 chars) | `joltik theme yippie` |
+
+Variants (catalog entries with several downloads, like one per wallpaper) are separate themes named after their download.
 
 `index.txt` is the same text uncompressed, for humans.
 
-### `themes/<id>.pak` and `themes/<id>.bgm.pak`
+### `themes/<id>.pak` and `music/<key>.pak`
 
-The theme files without music, and the music (`bgm/*.bcstm`) on its own. Both use the same container:
+The theme files without music, and the music (`bgm/*.bcstm`) on its own. Music is stored once per distinct content (the key is the start of its SHA-256), because many variants share the same song: that takes the music from ~2.9 GB to ~660 MB. Both use the same container:
 
 ```
 char[4] magic    "PTPK"
