@@ -2,7 +2,7 @@ name: Build and publish the mirror
 
 on:
   schedule:
-    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
+    - cron: "0 4 * * *" # daily check; it only rebuilds when the theme catalog changed
   workflow_dispatch:
   push:
     branches: [main]
@@ -19,32 +19,62 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.skip.outputs.skip != 'true' }}
+      marker: published-${{ steps.source.outputs.commit }}-${{ hashFiles('build.py', 'lz10.py') }}
     steps:
       - uses: actions/checkout@v4
 
-      # The archives (~3 GB) are kept between runs so only new themes are downloaded.
-      - uses: actions/cache@v4
+      - name: Find the catalog version
+        id: source
+        run: echo "commit=$(git ls-remote https://github.com/flashcarts/kernel-themes.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      # A marker per published (catalog, generator) pair. Scheduled runs stop here when
+      # nothing changed; restoring it daily also keeps GitHub from expiring it.
+      - name: Check if this version is published
+        id: published
+        uses: actions/cache/restore@v4
         with:
-          path: cache/dl
-          key: theme-archives-${{ github.run_id }}
+          path: .published
+          key: published-${{ steps.source.outputs.commit }}-${{ hashFiles('build.py', 'lz10.py') }}
+
+      - name: Decide
+        id: skip
+        run: echo "skip=${{ steps.published.outputs.cache-hit == 'true' && github.event_name == 'schedule' }}" >> "$GITHUB_OUTPUT"
+
+      # Downloaded archives (~3 GB) and compressed files, kept between builds so a
+      # build only downloads and compresses what is new. Saved only when the catalog
+      # changed (the key is per catalog version), not on every run.
+      - if: steps.skip.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache/dl
+            cache/lz
+          key: theme-archives-${{ steps.source.outputs.commit }}
           restore-keys: theme-archives-
 
-      - name: Install 7-Zip
+      - if: steps.skip.outputs.skip != 'true'
+        name: Install 7-Zip
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends p7zip-full
 
-      - uses: actions/setup-python@v5
+      - if: steps.skip.outputs.skip != 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - name: Build the mirror
+      - if: steps.skip.outputs.skip != 'true'
+        name: Build the mirror
         run: python -I build.py
 
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.skip.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: out
 
   deploy:
     needs: build
+    if: needs.build.outputs.built == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -52,3 +82,11 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # Only once it is live, so a failed deploy is retried by the next daily check.
+      - name: Mark this version as published
+        run: echo published > .published
+      - uses: actions/cache/save@v4
+        with:
+          path: .published
+          key: ${{ needs.build.outputs.marker }}

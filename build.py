@@ -8,7 +8,6 @@ and only files with validated names are copied into the packs."""
 
 import hashlib
 import json
-import lzma
 import os
 import re
 import shutil
@@ -159,14 +158,29 @@ def is_music(path):
     return path.lower().startswith("bgm/")
 
 
+def compress(data):
+    """LZ77, remembered in cache/lz by content: compressing in Python is the slow part
+    of a build, and most files are the same from one build to the next."""
+    path = os.path.join(CACHE, "lz", hashlib.sha256(data).hexdigest())
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    packed = lz10.compress(data)
+    assert lz10.decompress(packed) == data
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".part", "wb") as f:
+        f.write(packed)
+    os.replace(path + ".part", path)
+    return packed
+
+
 def build_pack(files):
     out = bytearray(PACK_MAGIC + struct.pack("<HH", PACK_VERSION, len(files)))
     for path in sorted(files):
         data = files[path]
         method, stored = METHOD_STORE, data
         if not is_music(path):  # music is ADPCM, it doesn't compress
-            packed = lz10.compress(data)
-            assert lz10.decompress(packed) == data, path
+            packed = compress(data)
             if len(packed) < len(data):
                 method, stored = METHOD_LZ10, packed
         name = path.encode("ascii")
@@ -180,9 +194,7 @@ def build_preview(files):
     lower = {p.lower(): p for p in files}
     for candidate in ("preview.bin", "topbg.bin"):
         if candidate in lower and len(files[lower[candidate]]) == PREVIEW_SIZE:
-            packed = lz10.compress(files[lower[candidate]])
-            assert lz10.decompress(packed) == files[lower[candidate]]
-            return packed
+            return compress(files[lower[candidate]])
     return None
 
 
@@ -208,7 +220,7 @@ def main():
     log(f"{len(entries)} themes in the catalog")
 
     index_lines, used_ids, used_folders = [], set(), set()
-    stats = {"archives": 0, "core": 0, "core_lzma": 0, "music": 0, "music_unique": 0, "previews": 0, "themes": 0}
+    stats = {"archives": 0, "core": 0, "music": 0, "music_unique": 0, "previews": 0, "themes": 0}
     for entry in entries:
         for download_name in entry.get("downloads") or []:
             log(entry.get("title", entry["slug"]), "-", download_name)
@@ -275,7 +287,6 @@ def main():
 
                 stats["themes"] += 1
                 stats["core"] += len(core_pack)
-                stats["core_lzma"] += len(lzma.compress(b"".join(core.values()), preset=9))
                 stats["music"] += music_size
                 stats["previews"] += len(preview) if preview else 0
 
@@ -290,8 +301,7 @@ def main():
     log(f"themes: {stats['themes']}")
     log(f"index: {kb(len(index))} raw, {kb(os.path.getsize(os.path.join(OUT, 'index.lz')))} compressed")
     log(f"original archives: {kb(stats['archives'])}")
-    log(f"core packs (LZ77): {kb(stats['core'])}, avg {kb(stats['core'] / max(1, stats['themes']))}"
-        f"  (LZMA would be {kb(stats['core_lzma'])})")
+    log(f"core packs (LZ77): {kb(stats['core'])}, avg {kb(stats['core'] / max(1, stats['themes']))}")
     log(f"music: {kb(stats['music'])} referenced, {kb(stats['music_unique'])} stored after dedup")
     log(f"previews: {kb(stats['previews'])}, avg {kb(stats['previews'] / max(1, stats['themes']))}")
 

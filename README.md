@@ -7,7 +7,7 @@ A compact mirror of the [Pico Launcher](https://github.com/LNH-team/pico-launche
 - previews fetched one at a time, only for the theme being looked at,
 - everything compressed with the simple LZ77 format of the DS BIOS.
 
-Published at **https://eylexander.github.io/pico-theme-mirror/**, rebuilt every week by GitHub Actions (`.github/workflows/publish.yml`).
+Published at **https://eylexander.github.io/pico-theme-mirror/** by GitHub Actions (`.github/workflows/publish.yml`): a daily check rebuilds only when the theme catalog (or the generator) changed, and then only downloads and compresses what is new.
 
 ## Credits and license
 
@@ -24,7 +24,7 @@ docker build -t theme-repo-builder .
 docker run --rm -v "<repo>:/repo" -w /repo theme-repo-builder python -I build.py
 ```
 
-Downloads are cached in `cache/` (rerunning only fetches new themes), the mirror goes to `out/`. `python -I lz10.py` runs the compressor's self test. Archives are untrusted: they are unpacked inside the container in a temporary folder, and only files whose names pass the checks in `collect_files()` end up in a pack.
+Downloads (`cache/dl`) and compressed files (`cache/lz`, by content hash) are cached, so a rebuild only fetches and compresses what is new; the mirror goes to `out/`. `python -I lz10.py` runs the compressor's self test. Archives are untrusted: they are unpacked inside the container in a temporary folder, and only files whose names pass the checks in `collect_files()` end up in a pack.
 
 ## Serving it from a PC (testing)
 
